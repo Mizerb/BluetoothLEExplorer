@@ -147,6 +147,7 @@ namespace BluetoothLEExplorer.Services.GattUuidHelpers
         TelephoneBearerService = 0x184B,
         GenericTelephoneBearerService = 0x184C,
         MicrophoneControl = 0x184D,
+        BroadcastAudioScan = 0x184F,
     }
 
     /// <summary>
@@ -409,6 +410,8 @@ namespace BluetoothLEExplorer.Services.GattUuidHelpers
         IncomingCall = 0x2BC1,
         CallFriendlyName = 0x2BC2,
         Mute = 0x2BC3,
+        BroadcastAudioScanControlPoint = 0x2BC4,
+        BroadcastReceiveState = 0x2BC5,
         SimpleKeyState = 0xFFE1,
     }
 
