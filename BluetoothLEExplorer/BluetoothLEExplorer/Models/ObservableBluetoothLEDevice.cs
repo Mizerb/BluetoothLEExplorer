@@ -612,13 +612,23 @@ namespace BluetoothLEExplorer.Models
                 catch (Exception ex)
                 {
                     Debug.WriteLine(debugMsg + "Exception - " + ex.Message);
-                    string msg = String.Format("Message:\n{0}\n\nInnerException:\n{1}\n\nStack:\n{2}", ex.Message, ex.InnerException, ex.StackTrace);
+                    
+                    // Check if this is likely a Bluetooth disabled error
+                    string errorMessage;
+                    if (ex.HResult == unchecked((int)0x8007048F) || // ERROR_DEVICE_NOT_AVAILABLE
+                        ex.HResult == unchecked((int)0x80070490) || // ERROR_NOT_FOUND
+                        ex.Message.Contains("Bluetooth") ||
+                        ex.Message.Contains("radio"))
+                    {
+                        errorMessage = "Could not connect to the device. Please ensure Bluetooth is enabled and the device is in range.\n\nError: " + ex.Message;
+                    }
+                    else
+                    {
+                        errorMessage = String.Format("Could not connect to the device.\n\nError: {0}\n\nInnerException: {1}", ex.Message, ex.InnerException);
+                    }
 
-                    var messageDialog = new MessageDialog(msg, "Exception");
+                    var messageDialog = new MessageDialog(errorMessage, "Connection Error");
                     await messageDialog.ShowAsync();
-
-                    // Debugger break here so we can catch unknown exceptions
-                    Debugger.Break();
                 }
             });
 

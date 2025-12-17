@@ -320,15 +320,23 @@ namespace GattServicesLibrary
         /// <param name="uuid">UUID of the Service to create</param>
         protected async Task CreateServiceProvider(Guid uuid)
         {
-            // Create Service Provider - similar to RFCOMM APIs
-            GattServiceProviderResult result = await GattServiceProvider.CreateAsync(uuid);
-
-            if (result.Error != BluetoothError.Success)
+            try
             {
-                throw new CreateServiceException(result);
-            }
+                // Create Service Provider - similar to RFCOMM APIs
+                GattServiceProviderResult result = await GattServiceProvider.CreateAsync(uuid);
 
-            ServiceProvider = result.ServiceProvider;
+                if (result.Error != BluetoothError.Success)
+                {
+                    throw new CreateServiceException(result);
+                }
+
+                ServiceProvider = result.ServiceProvider;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Exception creating service provider for {uuid}: {ex.Message}");
+                throw;
+            }
         }
     }
 }

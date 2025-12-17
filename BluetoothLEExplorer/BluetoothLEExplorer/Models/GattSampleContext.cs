@@ -248,6 +248,31 @@ namespace BluetoothLEExplorer.Models
             }
         }
 
+        /// <summary>
+        /// Source for <see cref="IsBluetoothAvailable"/>
+        /// </summary>
+        private bool isBluetoothAvailable = false;
+
+        /// <summary>
+        /// Gets a value indicating whether Bluetooth adapter is available and accessible
+        /// </summary>
+        public bool IsBluetoothAvailable
+        {
+            get
+            {
+                return isBluetoothAvailable;
+            }
+
+            private set
+            {
+                if (isBluetoothAvailable != value)
+                {
+                    isBluetoothAvailable = value;
+                    OnPropertyChanged(new PropertyChangedEventArgs("IsBluetoothAvailable"));
+                }
+            }
+        }
+
         // Make this variable static so we only query IsPropertyPresent once
         private static bool isSecureConnectionSupported = ApiInformation.IsPropertyPresent("Windows.Devices.Bluetooth.BluetoothLEDevice", "WasSecureConnectionUsedForPairing");
 
@@ -300,39 +325,65 @@ namespace BluetoothLEExplorer.Models
         /// </summary>
         private async void Init()
         {
-            Windows.Devices.Bluetooth.BluetoothAdapter adapter = await Windows.Devices.Bluetooth.BluetoothAdapter.GetDefaultAsync();
-
-            if(adapter ==  null)
+            try
             {
-                MessageDialog msg = new MessageDialog("Error getting access to Bluetooth adapter. Do you have a have bluetooth enabled?", "Error");
-                await msg.ShowAsync();
+                Windows.Devices.Bluetooth.BluetoothAdapter adapter = await Windows.Devices.Bluetooth.BluetoothAdapter.GetDefaultAsync();
 
+                if(adapter ==  null)
+                {
+                    MessageDialog msg = new MessageDialog("Error getting access to Bluetooth adapter. Do you have bluetooth enabled?", "Bluetooth Not Available");
+                    await msg.ShowAsync();
+
+                    IsPeripheralRoleSupported = false;
+                    IsCentralRoleSupported = false;
+                    IsBluetoothAvailable = false;
+                }
+                else
+                {
+                    IsPeripheralRoleSupported = adapter.IsPeripheralRoleSupported;
+                    IsCentralRoleSupported = adapter.IsCentralRoleSupported;
+                    IsBluetoothAvailable = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Init: Exception getting Bluetooth adapter - " + ex.Message);
+                MessageDialog msg = new MessageDialog("Could not access Bluetooth. Please ensure Bluetooth is enabled and try again.\n\nError: " + ex.Message, "Bluetooth Access Error");
+                await msg.ShowAsync();
+                
                 IsPeripheralRoleSupported = false;
                 IsCentralRoleSupported = false;
+                IsBluetoothAvailable = false;
             }
-            else
+
+            // Start the dev node watcher only if Bluetooth is available
+            if (IsBluetoothAvailable)
             {
-                IsPeripheralRoleSupported = adapter.IsPeripheralRoleSupported;
-                IsCentralRoleSupported = adapter.IsCentralRoleSupported;
+                try
+                {
+                    string[] requestedProperties = {};
+
+                    devNodeWatcher =
+                        DeviceInformation.CreateWatcher(
+                            DevNodeBTLEDeviceWatcherAQSString,
+                            requestedProperties,
+                            DeviceInformationKind.Device);
+
+                    devNodeWatcher.Added += DevNodeWatcher_Added;
+                    devNodeWatcher.Removed += DevNodeWatcher_Removed;
+                    devNodeWatcher.Updated += DevNodeWatcher_Updated;
+
+                    devNodeWatcher.Start();
+
+                    advertisementWatcher = new BluetoothLEAdvertisementWatcher();
+                    advertisementWatcher.Received += AdvertisementWatcher_Received;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Init: Exception starting watchers - " + ex.Message);
+                    IsBluetoothAvailable = false;
+                }
             }
-
-            // Start the dev node watcher
-            string[] requestedProperties = {};
-
-            devNodeWatcher =
-                DeviceInformation.CreateWatcher(
-                    DevNodeBTLEDeviceWatcherAQSString,
-                    requestedProperties,
-                    DeviceInformationKind.Device);
-
-            devNodeWatcher.Added += DevNodeWatcher_Added;
-            devNodeWatcher.Removed += DevNodeWatcher_Removed;
-            devNodeWatcher.Updated += DevNodeWatcher_Updated;
-
-            devNodeWatcher.Start();
-
-            advertisementWatcher = new BluetoothLEAdvertisementWatcher();
-            advertisementWatcher.Received += AdvertisementWatcher_Received;
         }
 
         private async void DevNodeWatcher_Added(DeviceWatcher sender, DeviceInformation args)
@@ -432,69 +483,97 @@ namespace BluetoothLEExplorer.Models
         /// </summary>
         public void StartEnumeration()
         {
-            // Additional properties we would like about the device.
-            if (ApiInformation.IsApiContractPresent("Windows.Foundation.UniversalApiContract", 5))
+            if (!IsBluetoothAvailable)
             {
-                string[] requestedProperties =
-                {
-                    "System.Devices.GlyphIcon",
-                    "System.Devices.Aep.Category",
-                    "System.Devices.Aep.ContainerId",
-                    "System.Devices.Aep.DeviceAddress",
-                    "System.Devices.Aep.IsConnected",
-                    "System.Devices.Aep.IsPaired",
-                    "System.Devices.Aep.IsPresent",
-                    "System.Devices.Aep.ProtocolId",
-                    "System.Devices.Aep.Bluetooth.Le.IsConnectable",
-                    "System.Devices.Aep.SignalStrength",
-                    "System.Devices.Aep.Bluetooth.LastSeenTime",
-                    "System.Devices.Aep.Bluetooth.Le.IsConnectable",
-                };
-
-                // BT_Code: Currently Bluetooth APIs don't provide a selector to get ALL devices that are both paired and non-paired.
-                deviceWatcher = DeviceInformation.CreateWatcher(
-                    BTLEDeviceWatcherAQSString,
-                    requestedProperties,
-                    DeviceInformationKind.AssociationEndpoint);
-            }
-            else
-            {
-                string[] requestedProperties =
-                {
-                    "System.Devices.GlyphIcon",
-                    "System.Devices.Aep.Category",
-                    "System.Devices.Aep.ContainerId",
-                    "System.Devices.Aep.DeviceAddress",
-                    "System.Devices.Aep.IsConnected",
-                    "System.Devices.Aep.IsPaired",
-                    "System.Devices.Aep.IsPresent",
-                    "System.Devices.Aep.ProtocolId",
-                    "System.Devices.Aep.Bluetooth.Le.IsConnectable",
-                    "System.Devices.Aep.SignalStrength",
-                };
-
-                // BT_Code: Currently Bluetooth APIs don't provide a selector to get ALL devices that are both paired and non-paired.
-                deviceWatcher = DeviceInformation.CreateWatcher(
-                    BTLEDeviceWatcherAQSString,
-                    requestedProperties,
-                    DeviceInformationKind.AssociationEndpoint);
+                Debug.WriteLine("StartEnumeration: Bluetooth is not available");
+                var _ = Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(
+                    Windows.UI.Core.CoreDispatcherPriority.Normal,
+                    async () =>
+                    {
+                        MessageDialog msg = new MessageDialog("Bluetooth is not available. Please enable Bluetooth and restart the application.", "Bluetooth Not Available");
+                        await msg.ShowAsync();
+                    });
+                return;
             }
 
-            // Register event handlers before starting the watcher.
-            deviceWatcher.Added += DeviceWatcher_Added;
-            deviceWatcher.Updated += DeviceWatcher_Updated;
-            deviceWatcher.Removed += DeviceWatcher_Removed;
-            deviceWatcher.EnumerationCompleted += DeviceWatcher_EnumerationCompleted;
-            deviceWatcher.Stopped += DeviceWatcher_Stopped;
+            try
+            {
+                // Additional properties we would like about the device.
+                if (ApiInformation.IsApiContractPresent("Windows.Foundation.UniversalApiContract", 5))
+                {
+                    string[] requestedProperties =
+                    {
+                        "System.Devices.GlyphIcon",
+                        "System.Devices.Aep.Category",
+                        "System.Devices.Aep.ContainerId",
+                        "System.Devices.Aep.DeviceAddress",
+                        "System.Devices.Aep.IsConnected",
+                        "System.Devices.Aep.IsPaired",
+                        "System.Devices.Aep.IsPresent",
+                        "System.Devices.Aep.ProtocolId",
+                        "System.Devices.Aep.Bluetooth.Le.IsConnectable",
+                        "System.Devices.Aep.SignalStrength",
+                        "System.Devices.Aep.Bluetooth.LastSeenTime",
+                        "System.Devices.Aep.Bluetooth.Le.IsConnectable",
+                    };
 
-            ClearAllDevices();
+                    // BT_Code: Currently Bluetooth APIs don't provide a selector to get ALL devices that are both paired and non-paired.
+                    deviceWatcher = DeviceInformation.CreateWatcher(
+                        BTLEDeviceWatcherAQSString,
+                        requestedProperties,
+                        DeviceInformationKind.AssociationEndpoint);
+                }
+                else
+                {
+                    string[] requestedProperties =
+                    {
+                        "System.Devices.GlyphIcon",
+                        "System.Devices.Aep.Category",
+                        "System.Devices.Aep.ContainerId",
+                        "System.Devices.Aep.DeviceAddress",
+                        "System.Devices.Aep.IsConnected",
+                        "System.Devices.Aep.IsPaired",
+                        "System.Devices.Aep.IsPresent",
+                        "System.Devices.Aep.ProtocolId",
+                        "System.Devices.Aep.Bluetooth.Le.IsConnectable",
+                        "System.Devices.Aep.SignalStrength",
+                    };
 
-            deviceWatcher.Start();
-            IsEnumerating = true;
-            EnumerationFinished = false;
+                    // BT_Code: Currently Bluetooth APIs don't provide a selector to get ALL devices that are both paired and non-paired.
+                    deviceWatcher = DeviceInformation.CreateWatcher(
+                        BTLEDeviceWatcherAQSString,
+                        requestedProperties,
+                        DeviceInformationKind.AssociationEndpoint);
+                }
 
-            UpdateAdvertisementFilter(new BluetoothLEAdvertisementFilter());
-            StartAdvertisementWatcher(BluetoothLEScanningMode.Active);
+                // Register event handlers before starting the watcher.
+                deviceWatcher.Added += DeviceWatcher_Added;
+                deviceWatcher.Updated += DeviceWatcher_Updated;
+                deviceWatcher.Removed += DeviceWatcher_Removed;
+                deviceWatcher.EnumerationCompleted += DeviceWatcher_EnumerationCompleted;
+                deviceWatcher.Stopped += DeviceWatcher_Stopped;
+
+                ClearAllDevices();
+
+                deviceWatcher.Start();
+                IsEnumerating = true;
+                EnumerationFinished = false;
+
+                UpdateAdvertisementFilter(new BluetoothLEAdvertisementFilter());
+                StartAdvertisementWatcher(BluetoothLEScanningMode.Active);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("StartEnumeration: Exception - " + ex.Message);
+                IsEnumerating = false;
+                var _ = Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(
+                    Windows.UI.Core.CoreDispatcherPriority.Normal,
+                    async () =>
+                    {
+                        MessageDialog msg = new MessageDialog("Could not start Bluetooth device enumeration. Please ensure Bluetooth is enabled.\n\nError: " + ex.Message, "Bluetooth Error");
+                        await msg.ShowAsync();
+                    });
+            }
         }
 
         /// <summary>
@@ -524,16 +603,30 @@ namespace BluetoothLEExplorer.Models
 
         public void StartAdvertisementWatcher(BluetoothLEScanningMode scanningMode)
         {
+            if (!IsBluetoothAvailable)
+            {
+                Debug.WriteLine("StartAdvertisementWatcher: Bluetooth is not available");
+                return;
+            }
+
             if (!AdvertisementWatcherStarted)
             {
-                Advertisements.Clear();
-                advertisementWatcher.ScanningMode = scanningMode;
-                if (ApiInformation.IsApiContractPresent("Windows.Foundation.UniversalApiContract", 10))
+                try
                 {
-                    advertisementWatcher.AllowExtendedAdvertisements = true;
+                    Advertisements.Clear();
+                    advertisementWatcher.ScanningMode = scanningMode;
+                    if (ApiInformation.IsApiContractPresent("Windows.Foundation.UniversalApiContract", 10))
+                    {
+                        advertisementWatcher.AllowExtendedAdvertisements = true;
+                    }
+                    advertisementWatcher.Start();
+                    AdvertisementWatcherStarted = true;
                 }
-                advertisementWatcher.Start();
-                AdvertisementWatcherStarted = true;
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("StartAdvertisementWatcher: Exception - " + ex.Message);
+                    AdvertisementWatcherStarted = false;
+                }
             }
         }
 
