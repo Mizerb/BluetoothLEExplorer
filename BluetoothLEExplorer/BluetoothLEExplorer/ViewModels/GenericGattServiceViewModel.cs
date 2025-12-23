@@ -138,9 +138,20 @@ namespace BluetoothLEExplorer.ViewModels
         {
             await Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(
                 Windows.UI.Core.CoreDispatcherPriority.Normal, 
-                () =>
+                async () =>
             {
-                Service.Start();
+                try
+                {
+                    Service.Start();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("GenericGattServiceViewModel.Start: Exception - " + ex.Message);
+                    var dialog = new Windows.UI.Popups.MessageDialog(
+                        "Could not start GATT service. Please ensure Bluetooth is enabled.\n\nError: " + ex.Message,
+                        "Bluetooth Error");
+                    await dialog.ShowAsync();
+                }
             });
         }
 

@@ -106,8 +106,27 @@ namespace BluetoothLEExplorer.Models
 
         public void Start()
         {
-            IsReady = false;
-            publisher.Start();
+            try
+            {
+                IsReady = false;
+                publisher.Start();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("ObservableBluetoothLEBeacon.Start: Exception - " + ex.Message);
+                IsReady = true;
+                
+                // Show error to user
+                var _ = Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(
+                    Windows.UI.Core.CoreDispatcherPriority.Normal,
+                    async () =>
+                    {
+                        var dialog = new Windows.UI.Popups.MessageDialog(
+                            "Could not start advertising beacon. Please ensure Bluetooth is enabled.\n\nError: " + ex.Message,
+                            "Bluetooth Error");
+                        await dialog.ShowAsync();
+                    });
+            }
         }
 
         public void Stop()
